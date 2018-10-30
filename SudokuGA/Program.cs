@@ -1,4 +1,5 @@
-﻿using System;
+﻿using MathNet.Numerics.Distributions;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -11,9 +12,15 @@ namespace SudokuGA
         struct ASudokuGrid
         {
             public int[,] Grid;
+            public float fitness;
             public ASudokuGrid(int[,] newGrid)
             {
                 Grid = newGrid;
+                fitness = GridsFitness(newGrid);
+            }
+            public void UpdateFitness()
+            {
+                fitness = GridsFitness(Grid);
             }
             //public SetGrid(int[,] newGrid)
             //{
@@ -23,15 +30,22 @@ namespace SudokuGA
 
         static Random rand = new Random();
         static int[,] ProblemSudokuGrid;// = new int[9,9];
-        static int PopulationSize = 9000;
+        static int PopulationSize = 1200;
         static int MaxGenerations = 1000;
         static int Generation = 0;
+        static float Phi = 0;
+        static int NumberOfMutations = 0;
+        static float Sigma = 1.0f;
         static float MutationRate = 0.072f;
-        static float SelectionRate = 0.82f;
-        static int k = 3;
+        static float SelectionRate = 0.85f;
+        static int k = 2;
+        static bool ReseedEnabled = true;
         static int Stale = 0;
+        static int StaleLimit = 50;
+        static float PopulationReSeedPercent = 0.75f;
         static List<ASudokuGrid> Population = new List<ASudokuGrid>();
         static List<Tuple<int, int>> AnsweredPosition;
+        static List<int> ValidUsableNumber = new List<int>() { 1, 2, 3, 4, 5, 6, 7, 8, 9 };
         static void Main(string[] args)
         {
 
@@ -121,6 +135,9 @@ namespace SudokuGA
 
         static void GenerateIntialPopulations()
         {
+            Population.Clear();
+            List<int> ValidUsableNumberClone = ValidUsableNumber.ToList();
+
             //Create random complete grids
             for (int i = 0; i < PopulationSize; ++i)
             {
@@ -131,34 +148,54 @@ namespace SudokuGA
                 {
                     for (int y = 0; y < Population[i].Grid.GetLength(1); ++y)
                     {
-                        if (Population[i].Grid[x, y] == 0)
+                        //If not an answered pos, fill in with a new random number
+                        if (!AnsweredPosition.Exists(pos => pos.Item1 == x && pos.Item2 == y))
                         {
-                            int newRandNum = rand.Next(1, 9);
-                            //For some reason this is setting it to the ProblemGrid as well.
+                            int newRandNum = ValidUsableNumberClone.OrderBy(n => rand.Next()).Take(1).ToList()[0];
+                            while (DoesIntAlreadyExistInRow(Population[i].Grid, x, newRandNum))
+                            {
+                                ValidUsableNumberClone.Remove(newRandNum);
+                                if(ValidUsableNumberClone.Count > 0)
+                                    newRandNum = ValidUsableNumberClone.OrderBy(n => rand.Next()).Take(1).ToList()[0];
+                            }
                             Population[i].Grid[x, y] = newRandNum;
                         }
                     }
+                    //Reset for next Row
+                    ValidUsableNumberClone = ValidUsableNumber.ToList(); ;
                 }
             }
         }
 
         static void RegenerateFromIndex(int index)
         {
+            List<int> ValidUsableNumberClone = ValidUsableNumber.ToList();
             //Create random complete grids
-            for (int i = index; i < PopulationSize; ++i)
+            for (int i = PopulationSize - index; i < PopulationSize; ++i)
             {
+                Population.RemoveAt(i);
+                Population.Insert(i, new ASudokuGrid((int[,])ProblemSudokuGrid.Clone()));
                 for (int x = 0; x < Population[i].Grid.GetLength(0); ++x)
                 {
                     for (int y = 0; y < Population[i].Grid.GetLength(1); ++y)
                     {
-                        if (Population[i].Grid[x, y] == 0)
+                        //If not an answered pos, fill in with a new random number
+                        if (!AnsweredPosition.Exists(pos => pos.Item1 == x && pos.Item2 == y))
                         {
-                            int newRandNum = rand.Next(1, 9);
-                            //For some reason this is setting it to the ProblemGrid as well.
+                            int newRandNum = ValidUsableNumberClone.OrderBy(n => rand.Next()).Take(1).ToList()[0];
+                            while (DoesIntAlreadyExistInRow(Population[i].Grid, x, newRandNum))
+                            {
+                                ValidUsableNumberClone.Remove(newRandNum);
+                                if (ValidUsableNumberClone.Count > 0)
+                                    newRandNum = ValidUsableNumberClone.OrderBy(n => rand.Next()).Take(1).ToList()[0];
+                            }
                             Population[i].Grid[x, y] = newRandNum;
                         }
                     }
+                    //Reset for next Row
+                    ValidUsableNumberClone = ValidUsableNumber.ToList(); ;
                 }
+                Population[i].UpdateFitness();
             }
         }
 
@@ -336,19 +373,20 @@ namespace SudokuGA
             return Genes;
         }
 
-        static List<int[,]> MateViaCrossover(int[,] Mommy, int[,] Daddy)
+        static List<ASudokuGrid> MateViaCrossover(ASudokuGrid Mommy, ASudokuGrid Daddy)
         {
             List<int> MommyGenes = new List<int>();
             List<int> DaddyGenes = new List<int>();
             List<int> NewChildGenes1 = new List<int>();
             List<int> NewChildGenes2 = new List<int>();
-            List<int[,]> Children = new List<int[,]>();
+            List<ASudokuGrid> Children = new List<ASudokuGrid>();
 
             int[,] ChildGrid = new int[9, 9];
 
-            MommyGenes = GetGridAsGenes(Mommy);
-            DaddyGenes = GetGridAsGenes(Daddy);
-            if (rand.NextDouble() <= SelectionRate)
+            MommyGenes = GetGridAsGenes(Mommy.Grid);
+            DaddyGenes = GetGridAsGenes(Daddy.Grid);
+            //Could replace 1.0 with a variable? 
+            if (rand.NextDouble() <= 1.0f)
             {
                 int RandomCrossOverPoint = rand.Next(0, 80);
 
@@ -359,14 +397,14 @@ namespace SudokuGA
                 NewChildGenes2.AddRange(MommyGenes.GetRange(RandomCrossOverPoint, ((DaddyGenes.Count) - RandomCrossOverPoint)));
 
 
-                Children.Add(ConvertRawGenesToGrid(NewChildGenes1));
-                Children.Add(ConvertRawGenesToGrid(NewChildGenes2));
+                Children.Add(new ASudokuGrid((int[,])ConvertRawGenesToGrid(NewChildGenes1).Clone()));
+                Children.Add(new ASudokuGrid((int[,])ConvertRawGenesToGrid(NewChildGenes2).Clone()));
             }
             else
             {
                 //Asexual reproduction 
-                Children.Add(ConvertRawGenesToGrid(MommyGenes));
-                Children.Add(ConvertRawGenesToGrid(DaddyGenes));
+                Children.Add(new ASudokuGrid((int[,])ConvertRawGenesToGrid(MommyGenes).Clone()));
+                Children.Add(new ASudokuGrid((int[,])ConvertRawGenesToGrid(DaddyGenes).Clone()));
             }
 
 
@@ -389,8 +427,8 @@ namespace SudokuGA
             ASudokuGrid BestGrid = new ASudokuGrid();
             for (int i = 0; i < Population.Count; i++)
             {
-                BestGrid = new ASudokuGrid((Population[i].Grid));
-                float currentFitness = GridsFitness(BestGrid.Grid);
+                BestGrid = new ASudokuGrid((int[,])(Population[i].Grid.Clone()));
+                float currentFitness = BestGrid.fitness;//GridsFitness(BestGrid.Grid);
                 if (currentFitness < bestFitness)
                 {
                     bestFitness = currentFitness;
@@ -411,24 +449,41 @@ namespace SudokuGA
             //List<ASudokuGrid> FilteredPopulation = new List<ASudokuGrid>();
             ASudokuGrid BestGrid = new ASudokuGrid();// = null;// = new int[9,9];
             ASudokuGrid CurrentGrid = new ASudokuGrid();// = null;
+            ASudokuGrid WeakestGrid = new ASudokuGrid();// = null;
             float BestGridFitness = 1.0f;
-
+            float WeakestGridFitness = 1.0f;
             for (int i = 0; i < k; i++)
             {
                 //Randomly select from the population who is going to compete
                 int randIndex = rand.Next(0, Population.Count - 1);
                 CurrentGrid = Population[randIndex];
                 //TempPopulation.RemoveAt(randIndex);
-                float CurrentGridFitness = GridsFitness(CurrentGrid.Grid);
+                float CurrentGridFitness = CurrentGrid.fitness;//GridsFitness(CurrentGrid.Grid);
                 if (BestGrid.Grid != null)
-                    BestGridFitness = GridsFitness(BestGrid.Grid);
+                    BestGridFitness = BestGrid.fitness;//GridsFitness(BestGrid.Grid);
+
+
                 if (BestGrid.Grid == null || CurrentGridFitness < BestGridFitness)
                 {
+                    if(BestGrid.Grid != null)
+                        WeakestGrid = new ASudokuGrid((int[,])BestGrid.Grid.Clone());
                     BestGrid = new ASudokuGrid((int[,])CurrentGrid.Grid.Clone());
+                }
+                else
+                {
+                    WeakestGrid = new ASudokuGrid((int[,])CurrentGrid.Grid.Clone());
+                    BestGrid = new ASudokuGrid((int[,])BestGrid.Grid.Clone());
                 }
             }
 
-            return new ASudokuGrid((int[,])BestGrid.Grid.Clone());
+            if (rand.NextDouble() < SelectionRate)
+            {
+                return new ASudokuGrid((int[,])BestGrid.Grid.Clone());
+            }
+            else
+            {
+                return new ASudokuGrid((int[,])WeakestGrid.Grid.Clone());
+            }
         }
 
         static List<ASudokuGrid> RouletteWheelSelection()
@@ -436,12 +491,13 @@ namespace SudokuGA
             return null;
         }
 
-        static int[,] Mutate(int[,] Grid)
+        static int[,] Mutate(ASudokuGrid Grid)
         {
-            int[,] MutatedGrid = (int[,])Grid.Clone();
+            int[,] MutatedGrid = (int[,])Grid.Grid.Clone();
             List<int> GridGenes = new List<int>();
-            GridGenes = GetGridAsGenes(Grid);
-
+            GridGenes = GetGridAsGenes(Grid.Grid);
+            float OriginalFitness = Grid.fitness;//GridsFitness(Grid);
+            bool HasMutated = false;
             for (int i = 0; i < GridGenes.Count; i++)
             {
                 for (int a = 0; a < AnsweredPosition.Count; a++)
@@ -476,43 +532,51 @@ namespace SudokuGA
                                 Console.WriteLine("Failed");
                             }
                             //Check if new value already exists in row.
-                            if (!DoesIntAlreadyExistInRow(MutatedGrid, RandRowA, Grid[RandRowB, RandColB]) && !DoesIntAlreadyExistInRow(MutatedGrid, RandRowB, Grid[RandRowA, RandColA]))
+                            if (!DoesIntAlreadyExistInRow(MutatedGrid, RandRowA, Grid.Grid[RandRowB, RandColB]) && !DoesIntAlreadyExistInRow(MutatedGrid, RandRowB, Grid.Grid[RandRowA, RandColA]))
                             {
                                 //Safe to swap so swap Values at random spots. 
                                 int AValue = MutatedGrid[RandRowA, RandColA];
                                 MutatedGrid[RandRowA, RandColA] = MutatedGrid[RandRowB, RandColB];
                                 MutatedGrid[RandRowB, RandColB] = AValue;
-                            }
-
+                                HasMutated = true;
+                                NumberOfMutations++;
+                            }                         
                         }
                     }
                 }
             }
 
-            //for (int i = 0; i < GridGenes.Count; i++)
-            //{
-            //    AnsweredPosition.ForEach(pos =>
-            //    {
-
-            //    if ((pos.Item1 == (i / 9) && pos.Item2 == (i % 9)))
-            //    {
-            //        MutatedGrid[pos.Item1, pos.Item2] = GridGenes[i];
-            //            break;
-            //    }
-            //    else
-            //    {
-            //        if (rand.NextDouble() < MutationRate)
-            //        {
-            //            //Mutate randomly
-            //            MutatedGrid[i / 9, i % 9] = rand.Next(1, 9);
-            //        }
-            //    }
-
-            //    });
-            //}
-
+            if (GridsFitness(MutatedGrid) > OriginalFitness && HasMutated)
+            {
+                Phi = Phi + 1;
+            }
 
             return MutatedGrid;
+        }
+
+        static void CalculateDynamicMutationRate()
+        {
+            if (NumberOfMutations == 0)
+            {
+                Phi = 0;
+            }
+            else
+            {
+                Phi = Phi / NumberOfMutations;
+            }
+
+            if (Phi > 2.0f)
+            {
+                Sigma = Sigma / 0.998f;
+            }
+            else if (Phi < 2.0f)
+            {
+                Sigma = Sigma * 0.998f;
+            }
+
+            Normal normalDist = new Normal(0.0f, Sigma);
+
+            MutationRate = Math.Abs((float)normalDist.Sample());
         }
 
         static bool DoesIntAlreadyExistInRow(int[,] Grid, int Row, int ValueToCheck)
@@ -531,7 +595,8 @@ namespace SudokuGA
         static void SortPopulationByFitness()
         {
             //Population.OrderByDescending(SudokuGrid => GridsFitness(SudokuGrid.Grid));
-            Population.Sort((SudokuGridA, SudokuGridB) => GridsFitness(SudokuGridA.Grid).CompareTo(GridsFitness(SudokuGridB.Grid)));
+            Population.Sort((SudokuGridA, SudokuGridB) => SudokuGridA.fitness.CompareTo(SudokuGridB.fitness));
+            //Population.OrderBy(Grid => Guid.NewGuid());
         }
 
         static void RunEpoch()
@@ -544,12 +609,14 @@ namespace SudokuGA
                 for (int i = 0; i < PopulationSize; i++)
                 {
                     //Apply Selection Pressures, by choosing the best random mommy and daddy 
-                    List<int[,]> NewChilldren = MateViaCrossover(TournamentSelection().Grid, TournamentSelection().Grid);
+                    List<ASudokuGrid> NewChilldren = MateViaCrossover(new ASudokuGrid((int[,])TournamentSelection().Grid.Clone()), new ASudokuGrid((int[,])TournamentSelection().Grid.Clone()));
                     NewChilldren.ForEach(child => 
                     {
-                        Population.Add(new ASudokuGrid(Mutate((int[,])child.Clone())));
+                        Population.Add(new ASudokuGrid((int[,])Mutate(child).Clone()));
                     });
                 }
+
+                //CalculateDynamicMutationRate();
 
                 //Elitism
                 //Try Adding to population, sorting then, pruning out the worst instead of just swapping out new generation with old, although both seem to get stuck in the same place at different rates. 
@@ -559,19 +626,27 @@ namespace SudokuGA
                 //Old Original Population is now the new Population, rinse and repeat. 
                 //Population = NewPopulation;
 
-                if (GridsFitness(Population[0].Grid) != GridsFitness(Population[0].Grid))
+                if (ReseedEnabled)
                 {
-                    Stale = 0;
-                }
-                else
-                {
-                    Stale += 1;
-                }
+                    if (Population[0].fitness != Population[1].fitness)
+                    {
+                        Stale = 0;
+                    }
+                    else
+                    {
+                        Stale += 1;
+                    }
 
-                if (Stale >= 22)
-                {
-                    //This may not be a very good solution, seems useless probably gets pruned since none of the will be good? 
-                    //RegenerateFromIndex(PopulationSize / 2);
+                    if (Stale >= StaleLimit)
+                    {
+                        //This may not be a very good solution, seems useless probably gets pruned since none of the will be good? 
+                        RegenerateFromIndex((int)(PopulationSize * PopulationReSeedPercent));
+                        Console.WriteLine("Went Stale, Reseeding");
+                        Stale = 0;
+                        NumberOfMutations = 0;
+                        Sigma = 1;
+                        MutationRate = 0.07f;
+                    }
                 }
 
                 Generation++;
