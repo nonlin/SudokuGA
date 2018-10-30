@@ -23,15 +23,17 @@ namespace SudokuGA
 
         static Random rand = new Random();
         static int[,] ProblemSudokuGrid;// = new int[9,9];
-        static int PopulationSize = 1000;
-        static int MaxGenerations = 10000;
+        static int PopulationSize = 6500;
+        static int MaxGenerations = 1000;
         static int Generation = 0;
-        static float MutationRate = 0.1f;
-        static float SelectionRate = 1.0f;
-        static int k = 150;
+        static float MutationRate = 0.05f;
+        static float SelectionRate = 0.7f;
+        static int k = 3;
         static List<ASudokuGrid> Population = new List<ASudokuGrid>();
         static List<Tuple<int, int>> AnsweredPosition;
-    static void Main(string[] args)
+        static List<int> AnsweredYPosition;
+        static List<int> AnsweredXPosition;
+        static void Main(string[] args)
         {
 
             InitProblemGrid();
@@ -66,9 +68,15 @@ namespace SudokuGA
                 { 2, 8, 7, 4, 1, 9, 6, 3, 5 },
                 { 3, 4, 5, 2, 8, 6, 1, 7, 9 }
             };
-        
 
-            Console.WriteLine(GridsFitness(TestGrid2));
+
+            //for (int i = 0; i < 20; i++)
+            //{
+            //    PrintGrid(GridToString(Population[i].Grid));
+            //    Console.WriteLine();
+            //}
+
+            //Console.WriteLine(GridsFitness(TestGrid2));
             //int randomGrid1 = rand.Next(0, PopulationSize);
             //int randomGrid2 = rand.Next(0, PopulationSize);
 
@@ -125,12 +133,12 @@ namespace SudokuGA
             }
         }
 
-        static void PrintGrid(List<string> Row)
+        static void PrintGrid(List<string> GridAsString)
         {
 
-            Row.ForEach(row =>
+            GridAsString.ForEach(element =>
             {
-                Console.WriteLine(row);
+                Console.WriteLine(element);
             });
         }
 
@@ -156,22 +164,47 @@ namespace SudokuGA
             List<int> ColInts = new List<int>();
             List<List<int>> Subgrids = new List<List<int>>();
             float DuplicateCount = 0.0f;
+            int YCounter = 1;
+            int XCounter = 1;
 
-            for (int x = 0; x < Grid.GetLength(0); ++x)
+            //May want/need to wrap into a method, this converts a 2D Grid into sub grids for a 9x9 grid.
+            for (int SubgridIndex = 1; SubgridIndex <= 9; SubgridIndex++)
             {
-                for (int y = 0; y < Grid.GetLength(1); ++y)
+                Subgrids.Add(new List<int>());
+                for (int x = ((Grid.GetLength(0) / 3) * XCounter) - (Grid.GetLength(0) / 3); x < (Grid.GetLength(0) / 3) * XCounter; ++x)
                 {
-                    RowInts.Add(Grid[x,y]);
+                    //Y Works well, do something for X now. 
+                    for (int y = (Grid.GetLength(1) - (3 * (3 - YCounter))) - 3; y < (Grid.GetLength(1) - (3 * (3 - YCounter))); ++y)
+                    {
+                        Subgrids[Subgrids.Count - 1].Add(Grid[x,y]);
+                    }
+                }
+                if (SubgridIndex % 3 == 0)
+                {
+                    YCounter = 1;
+                    XCounter++;
+                }
+                else
+                {
+                    YCounter++;
+                }
+            }
+            //Count doubles for subgrids
+            Subgrids.ForEach(SubGrid =>
+            {
+                if (SubGrid.Count != SubGrid.Distinct().Count())
+                {
+                    DuplicateCount = DuplicateCount + SubGrid.Count - SubGrid.Distinct().Count();
+                }
+            });
+
+            //Count for rows and cols
+            for (int x = 0; x < (Grid.GetLength(0)); ++x)
+            {
+                for (int y = 0; y < (Grid.GetLength(1)); ++y)
+                {
+                    RowInts.Add(Grid[x, y]);
                     ColInts.Add(Grid[y, x]);
-                    //Doesn't work as I thought it should
-                    //if (x % 3 == 0 && y % 3 == 0)
-                    //{
-                    //    Subgrids.Add(new List<int>());
-                    //}
-                    //else
-                    //{
-                    //    Subgrids[Subgrids.Count - 1].Add(Grid[y, x]);
-                    //}
                 }
 
                 if (RowInts.Count != RowInts.Distinct().Count())
@@ -182,20 +215,11 @@ namespace SudokuGA
                 {
                     DuplicateCount = DuplicateCount + ColInts.Count - ColInts.Distinct().Count();
                 }
-                //Doesn't work as I thought it should
-                //Subgrids.ForEach(SubGrid =>
-                //{
-                //    if (SubGrid.Count != SubGrid.Distinct().Count())
-                //    {
-                //        DuplicateCount = DuplicateCount + ColInts.Count - ColInts.Distinct().Count();
-                //    }
-                //});
                 RowInts.Clear();
                 ColInts.Clear();
-
             }
 
-            return DuplicateCount / 144.0f;
+            return DuplicateCount / 216.0f;
         }
 
         static void PrintFitnessForEntirePopulation(List<ASudokuGrid> Population)
@@ -245,6 +269,29 @@ namespace SudokuGA
             return ListOfPositionsToIgnore;
         }
 
+        /// <summary>
+        /// Probably don't need this after all
+        /// </summary>
+        /// <param name="Grid"></param>
+        /// <returns></returns>
+        //static List<int> GetIndexesToIgnore(int[,] Grid)
+        //{
+        //    List<int> ListOfPositionsToIgnore = new List<int>();
+
+        //    for (int x = 0; x < Grid.GetLength(0); ++x)
+        //    {
+        //        for (int y = 0; y < Grid.GetLength(1); ++y)
+        //        {
+        //            if (Grid[x, y] != 0)
+        //            {
+        //                ListOfPositionsToIgnore.Add();
+        //            }
+        //        }
+        //    }
+
+        //    return ListOfPositionsToIgnore;
+        //}
+
         static List<int> GetGridAsGenes(int[,] Parent)
         {
             List<int> Genes = new List<int>();
@@ -272,18 +319,27 @@ namespace SudokuGA
 
             MommyGenes = GetGridAsGenes(Mommy);
             DaddyGenes = GetGridAsGenes(Daddy);
+            if (rand.NextDouble() <= SelectionRate)
+            {
+                int RandomCrossOverPoint = rand.Next(0, 80);
 
-            int RandomCrossOverPoint = rand.Next(0, 80);
+                NewChildGenes1.AddRange(MommyGenes.GetRange(0, RandomCrossOverPoint));
+                NewChildGenes1.AddRange(DaddyGenes.GetRange(RandomCrossOverPoint, ((DaddyGenes.Count) - RandomCrossOverPoint)));
 
-            NewChildGenes1.AddRange(MommyGenes.GetRange(0, RandomCrossOverPoint));
-            NewChildGenes1.AddRange(DaddyGenes.GetRange(RandomCrossOverPoint, ((DaddyGenes.Count) - RandomCrossOverPoint)));
-
-            NewChildGenes2.AddRange(DaddyGenes.GetRange(0, RandomCrossOverPoint));
-            NewChildGenes2.AddRange(MommyGenes.GetRange(RandomCrossOverPoint, ((DaddyGenes.Count) - RandomCrossOverPoint)));
+                NewChildGenes2.AddRange(DaddyGenes.GetRange(0, RandomCrossOverPoint));
+                NewChildGenes2.AddRange(MommyGenes.GetRange(RandomCrossOverPoint, ((DaddyGenes.Count) - RandomCrossOverPoint)));
 
 
-            Children.Add(ConvertRawGenesToGrid(NewChildGenes1));
-            Children.Add(ConvertRawGenesToGrid(NewChildGenes2));
+                Children.Add(ConvertRawGenesToGrid(NewChildGenes1));
+                Children.Add(ConvertRawGenesToGrid(NewChildGenes2));
+            }
+            else
+            {
+                //Asexual reproduction 
+                Children.Add(ConvertRawGenesToGrid(MommyGenes));
+                Children.Add(ConvertRawGenesToGrid(DaddyGenes));
+            }
+
 
             return Children;
         }
@@ -353,7 +409,7 @@ namespace SudokuGA
 
         static int[,] Mutate(int[,] Grid)
         {
-            int[,] MutatedGrid = new int[9,9];
+            int[,] MutatedGrid = (int[,])Grid.Clone();
             List<int> GridGenes = new List<int>();
             GridGenes = GetGridAsGenes(Grid);
 
@@ -368,10 +424,16 @@ namespace SudokuGA
                     }
                     else
                     {
-                        if (rand.NextDouble() < MutationRate)
+                        if (rand.NextDouble() <= MutationRate)
                         {
                             //Mutate randomly
-                            MutatedGrid[i / 9, i % 9] = rand.Next(1, 9);
+                            int RandRow = rand.Next(0, 8);
+                            //while (AnsweredPosition.Exists(pos => pos.Item1 == RandRow))
+                            //{
+
+                            //}
+                            int newRandInt = rand.Next(1, 9);
+                            MutatedGrid[i / 9, i % 9] = newRandInt;
                         }
                     }
                 }
@@ -429,7 +491,7 @@ namespace SudokuGA
                 //Old Original Populatio is now the new Population, rinse and repeat. 
                 Population = NewPopulation;
                 Generation++;
-                float bestFitness = BestFitnessInPopulation(false);
+                float bestFitness = BestFitnessInPopulation(true);
 
                 if (bestFitness == 0)
                 {
