@@ -23,12 +23,13 @@ namespace SudokuGA
 
         static Random rand = new Random();
         static int[,] ProblemSudokuGrid;// = new int[9,9];
-        static int PopulationSize = 6500;
+        static int PopulationSize = 9000;
         static int MaxGenerations = 1000;
         static int Generation = 0;
-        static float MutationRate = 0.065f;
-        static float SelectionRate = 0.7f;
+        static float MutationRate = 0.072f;
+        static float SelectionRate = 0.82f;
         static int k = 3;
+        static int Stale = 0;
         static List<ASudokuGrid> Population = new List<ASudokuGrid>();
         static List<Tuple<int, int>> AnsweredPosition;
         static void Main(string[] args)
@@ -68,9 +69,19 @@ namespace SudokuGA
             };
 
 
-            //for (int i = 0; i < 20; i++)
+            //for (int i = 0; i < 8; i++)
             //{
-            //    PrintGrid(GridToString(Population[i].Grid));
+            //    //PrintGrid(GridToString(Population[i].Grid));
+            //    Console.WriteLine(GridsFitness(Population[i].Grid));
+            //    Console.WriteLine();
+            //}
+
+            //SortPopulationByFitness();
+            //Console.WriteLine("Sorted?");
+            //for (int i = 0; i < 8; i++)
+            //{
+            //    //PrintGrid(GridToString(Population[i].Grid));
+            //    Console.WriteLine(GridsFitness(Population[i].Grid));
             //    Console.WriteLine();
             //}
 
@@ -116,6 +127,26 @@ namespace SudokuGA
                 //rand = new Random();
                 Population.Add(new ASudokuGrid((int[,])ProblemSudokuGrid.Clone()));
 
+                for (int x = 0; x < Population[i].Grid.GetLength(0); ++x)
+                {
+                    for (int y = 0; y < Population[i].Grid.GetLength(1); ++y)
+                    {
+                        if (Population[i].Grid[x, y] == 0)
+                        {
+                            int newRandNum = rand.Next(1, 9);
+                            //For some reason this is setting it to the ProblemGrid as well.
+                            Population[i].Grid[x, y] = newRandNum;
+                        }
+                    }
+                }
+            }
+        }
+
+        static void RegenerateFromIndex(int index)
+        {
+            //Create random complete grids
+            for (int i = index; i < PopulationSize; ++i)
+            {
                 for (int x = 0; x < Population[i].Grid.GetLength(0); ++x)
                 {
                     for (int y = 0; y < Population[i].Grid.GetLength(1); ++y)
@@ -385,7 +416,7 @@ namespace SudokuGA
             for (int i = 0; i < k; i++)
             {
                 //Randomly select from the population who is going to compete
-                int randIndex = rand.Next(0, PopulationSize);
+                int randIndex = rand.Next(0, Population.Count - 1);
                 CurrentGrid = Population[randIndex];
                 //TempPopulation.RemoveAt(randIndex);
                 float CurrentGridFitness = GridsFitness(CurrentGrid.Grid);
@@ -497,31 +528,52 @@ namespace SudokuGA
             return false;
         }
 
+        static void SortPopulationByFitness()
+        {
+            //Population.OrderByDescending(SudokuGrid => GridsFitness(SudokuGrid.Grid));
+            Population.Sort((SudokuGridA, SudokuGridB) => GridsFitness(SudokuGridA.Grid).CompareTo(GridsFitness(SudokuGridB.Grid)));
+        }
+
         static void RunEpoch()
         {
             for (int g = 0; g < MaxGenerations; g++)
             {
                 List<ASudokuGrid> NewPopulation = new List<ASudokuGrid>();
-                //Apply Selection Pressures
 
                 //Mate to New Populataion
-                for (int i = 0; i < PopulationSize/2; i++)
+                for (int i = 0; i < PopulationSize; i++)
                 {
+                    //Apply Selection Pressures, by choosing the best random mommy and daddy 
                     List<int[,]> NewChilldren = MateViaCrossover(TournamentSelection().Grid, TournamentSelection().Grid);
                     NewChilldren.ForEach(child => 
                     {
-                        NewPopulation.Add(new ASudokuGrid(child));
+                        Population.Add(new ASudokuGrid(Mutate((int[,])child.Clone())));
                     });
                 }
 
-                //Mutate Children
-                for (int m = 0; m < NewPopulation.Count; m++)
+                //Elitism
+                //Try Adding to population, sorting then, pruning out the worst instead of just swapping out new generation with old, although both seem to get stuck in the same place at different rates. 
+                SortPopulationByFitness();
+                Population.RemoveRange(PopulationSize - 1, Population.Count - PopulationSize);
+
+                //Old Original Population is now the new Population, rinse and repeat. 
+                //Population = NewPopulation;
+
+                if (GridsFitness(Population[0].Grid) != GridsFitness(Population[0].Grid))
                 {
-                    NewPopulation[m] = new ASudokuGrid(Mutate(NewPopulation[m].Grid));
+                    Stale = 0;
+                }
+                else
+                {
+                    Stale += 1;
                 }
 
-                //Old Original Populatio is now the new Population, rinse and repeat. 
-                Population = NewPopulation;
+                if (Stale >= 22)
+                {
+                    //This may not be a very good solution, seems useless probably gets pruned since none of the will be good? 
+                    //RegenerateFromIndex(PopulationSize / 2);
+                }
+
                 Generation++;
                 float bestFitness = BestFitnessInPopulation(false);
 
