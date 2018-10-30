@@ -30,7 +30,7 @@ namespace SudokuGA
 
         static Random rand = new Random();
         static int[,] ProblemSudokuGrid;// = new int[9,9];
-        static int PopulationSize = 1200;
+        static int PopulationSize = 3500;
         static int MaxGenerations = 1000;
         static int Generation = 0;
         static float Phi = 0;
@@ -41,7 +41,7 @@ namespace SudokuGA
         static int k = 2;
         static bool ReseedEnabled = true;
         static int Stale = 0;
-        static int StaleLimit = 50;
+        static int StaleLimit = 30;
         static float PopulationReSeedPercent = 0.75f;
         static List<ASudokuGrid> Population = new List<ASudokuGrid>();
         static List<Tuple<int, int>> AnsweredPosition;
