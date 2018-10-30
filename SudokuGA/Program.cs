@@ -36,13 +36,13 @@ namespace SudokuGA
         static float Phi = 0;
         static int NumberOfMutations = 0;
         static float Sigma = 1.0f;
-        static float MutationRate = 0.072f;
-        static float SelectionRate = 0.85f;
+        static float MutationRate = 0.1f;
+        static float SelectionRate = 0.78f;
         static int k = 2;
         static bool ReseedEnabled = true;
         static int Stale = 0;
         static int StaleLimit = 15;
-        static float PopulationReSeedPercent = 0.75f;
+        static float PopulationReSeedPercent = 0.85f;
         static List<ASudokuGrid> Population = new List<ASudokuGrid>();
         static List<Tuple<int, int>> AnsweredPosition;
         static List<int> ValidUsableNumber = new List<int>() { 1, 2, 3, 4, 5, 6, 7, 8, 9 };
@@ -53,7 +53,6 @@ namespace SudokuGA
             AnsweredPosition = GetPositionsToIgnore(ProblemSudokuGrid);
 
             GenerateIntialPopulations();
-
             RunEpoch();
 
             int[,] TestGrid = new int[9, 9]
@@ -69,7 +68,7 @@ namespace SudokuGA
                 { 0, 0, 0, 0, 0, 0, 0, 0, 0 }
             };
 
-            int[,] TestGrid2 = new int[9, 9]
+            int[,] AnswerGrid = new int[9, 9]
             {
                 { 5, 3, 4, 6, 7, 8, 9, 1, 2 },
                 { 6, 7, 2, 1, 9, 5, 3, 4, 8 },
@@ -99,7 +98,7 @@ namespace SudokuGA
             //    Console.WriteLine();
             //}
 
-            //Console.WriteLine(GridsFitness(TestGrid2));
+            //Console.WriteLine(GridsFitness(TestGrid));
             //int randomGrid1 = rand.Next(0, PopulationSize);
             //int randomGrid2 = rand.Next(0, PopulationSize);
 
@@ -275,7 +274,7 @@ namespace SudokuGA
 
                 if (RowInts.Count != RowInts.Distinct().Count())
                 {
-                    DuplicateCount = DuplicateCount + RowInts.Count - RowInts.Distinct().Count();
+                    //DuplicateCount = DuplicateCount + RowInts.Count - RowInts.Distinct().Count();
                 }
                 if (ColInts.Count != ColInts.Distinct().Count())
                 {
@@ -285,7 +284,7 @@ namespace SudokuGA
                 ColInts.Clear();
             }
 
-            return DuplicateCount / 216.0f;
+            return DuplicateCount / 144.0f;//216.0f;
         }
 
         static void PrintFitnessForEntirePopulation(List<ASudokuGrid> Population)
