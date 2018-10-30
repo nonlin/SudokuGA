@@ -26,13 +26,11 @@ namespace SudokuGA
         static int PopulationSize = 6500;
         static int MaxGenerations = 1000;
         static int Generation = 0;
-        static float MutationRate = 0.05f;
+        static float MutationRate = 0.065f;
         static float SelectionRate = 0.7f;
         static int k = 3;
         static List<ASudokuGrid> Population = new List<ASudokuGrid>();
         static List<Tuple<int, int>> AnsweredPosition;
-        static List<int> AnsweredYPosition;
-        static List<int> AnsweredXPosition;
         static void Main(string[] args)
         {
 
@@ -424,16 +422,37 @@ namespace SudokuGA
                     }
                     else
                     {
+                        //Swapping when we know it is safe, instead of just randomly switching or always swapping has helped the GA make progress significantly, as this helps prevent back tracking. 
                         if (rand.NextDouble() <= MutationRate)
                         {
                             //Mutate randomly
-                            int RandRow = rand.Next(0, 8);
-                            //while (AnsweredPosition.Exists(pos => pos.Item1 == RandRow))
-                            //{
+                            int RandRowA = rand.Next(0, 8);
+                            int RandColA = rand.Next(0, 8);
+                            int RandRowB = rand.Next(0, 8);
+                            int RandColB = rand.Next(0, 8);
+                            //make sure we dont' swap an answered spot
+                            while (AnsweredPosition.Exists(pos => pos.Item1 == RandRowA && pos.Item2 == RandColA) || AnsweredPosition.Exists(pos => pos.Item1 == RandRowB && pos.Item2 == RandColB))
+                            {
+                                //Keep trying to get a row aand col that doesn't match an existing spot
+                                RandRowA = rand.Next(0, 8);
+                                RandColA = rand.Next(0, 8);
 
-                            //}
-                            int newRandInt = rand.Next(1, 9);
-                            MutatedGrid[i / 9, i % 9] = newRandInt;
+                                RandRowB = rand.Next(0, 8);
+                                RandColB = rand.Next(0, 8);
+                            }
+                            if (RandRowA == 0 && RandColA == 0)
+                            {
+                                Console.WriteLine("Failed");
+                            }
+                            //Check if new value already exists in row.
+                            if (!DoesIntAlreadyExistInRow(MutatedGrid, RandRowA, Grid[RandRowB, RandColB]) && !DoesIntAlreadyExistInRow(MutatedGrid, RandRowB, Grid[RandRowA, RandColA]))
+                            {
+                                //Safe to swap so swap Values at random spots. 
+                                int AValue = MutatedGrid[RandRowA, RandColA];
+                                MutatedGrid[RandRowA, RandColA] = MutatedGrid[RandRowB, RandColB];
+                                MutatedGrid[RandRowB, RandColB] = AValue;
+                            }
+
                         }
                     }
                 }
@@ -465,6 +484,19 @@ namespace SudokuGA
             return MutatedGrid;
         }
 
+        static bool DoesIntAlreadyExistInRow(int[,] Grid, int Row, int ValueToCheck)
+        {
+            for (int y = 0; y < 9; y++)
+            {
+                if (Grid[Row, y] == ValueToCheck)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         static void RunEpoch()
         {
             for (int g = 0; g < MaxGenerations; g++)
@@ -491,7 +523,7 @@ namespace SudokuGA
                 //Old Original Populatio is now the new Population, rinse and repeat. 
                 Population = NewPopulation;
                 Generation++;
-                float bestFitness = BestFitnessInPopulation(true);
+                float bestFitness = BestFitnessInPopulation(false);
 
                 if (bestFitness == 0)
                 {
