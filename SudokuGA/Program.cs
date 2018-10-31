@@ -7,44 +7,48 @@ using System.Threading.Tasks;
 
 namespace SudokuGA
 {
+    public class ASudokuGrid
+    {
+        public int[,] Grid;
+        public float fitness;
+
+        public ASudokuGrid()
+        {
+
+        }
+
+        public ASudokuGrid(int[,] newGrid)
+        {
+            Grid = newGrid;
+            fitness = Program.GridsFitness(newGrid);
+        }
+        public void UpdateFitness()
+        {
+            fitness = Program.GridsFitness(Grid);
+        }
+    }
+
     public class Program
     {
-        struct ASudokuGrid
-        {
-            public int[,] Grid;
-            public float fitness;
-            public ASudokuGrid(int[,] newGrid)
-            {
-                Grid = newGrid;
-                fitness = GridsFitness(newGrid);
-            }
-            public void UpdateFitness()
-            {
-                fitness = GridsFitness(Grid);
-            }
-            //public SetGrid(int[,] newGrid)
-            //{
 
-            //}
-        }
 
         static Random rand = new Random();
         static int[,] ProblemSudokuGrid;// = new int[9,9];
         static ASudokuGrid ProblemGrid;
-        static int PopulationSize = 100;
+        static int PopulationSize = 300;
         static int ElitesSize = (int)(0.05f * PopulationSize);
         static int MaxGenerations = 1000;
         static int Generation = 0;
         static float Phi = 0;
         static int NumberOfMutations = 0;
         static float Sigma = 1.0f;
-        static float MutationRate = 0.06f;
+        static float MutationRate = 0.07f;
         static float SelectionRate = .85f;
         static float CrossoverRate = 1.0f;
-        static int k = 5;
+        static int k = 2;
         static bool ReseedEnabled = true;
         static int Stale = 0;
-        static int StaleLimit = 50;
+        static int StaleLimit = 100;
         static float PopulationReSeedPercent = 0.85f;
         static List<ASudokuGrid> Population = new List<ASudokuGrid>();
         static List<Tuple<int, int>> AnsweredPosition;
@@ -87,7 +91,7 @@ namespace SudokuGA
             //Test Check Methods
             //Console.WriteLine(WillWeInsertduplicateForSubgid(new ASudokuGrid(AnswerGrid), 1, 1, 8));
             //Console.WriteLine(DoesColContainDuplicates(new ASudokuGrid(AnswerGrid), 2));
-            //Console.WriteLine(DoesGridColHaveDuplicates(new ASudokuGrid(AnswerGrid)));
+            //Console.WriteLine(GridsFitness(AnswerGrid));
             
             //for (int i = 0; i < 8; i++)
             //{
@@ -183,10 +187,11 @@ namespace SudokuGA
                     //Reset for next Row
                     ValidUsableNumberClone = ValidUsableNumber.ToList(); ;
                 }
-                //if (DoesGridRowsHaveDoubles(Population[i])) 
-                //{
-                //    Console.WriteLine("Why");
-                //}
+                if (DoesGridRowsHaveDoubles(Population[i]))
+                {
+                    Console.WriteLine("Why");
+                }
+                Population[i].UpdateFitness();
             }
         }
 
@@ -262,7 +267,7 @@ namespace SudokuGA
             return Row;
         }
 
-        static float GridsFitness(int[,] Grid)
+        static public float GridsFitness(int[,] Grid)
         {
             //Seems to count two rows at a time? 
             List<int> RowInts = new List<int>();
@@ -869,62 +874,39 @@ namespace SudokuGA
             GridGenes = GetGridAsGenes(Grid.Grid);
             float OriginalFitness = Grid.fitness;//GridsFitness(Grid);
             bool HasMutated = false;
-            for (int i = 0; i < GridGenes.Count; i++)
+
+            //Swapping when we know it is safe, instead of just randomly switching or always swapping has helped the GA make progress significantly, as this helps prevent back tracking. 
+            if (rand.NextDouble() <= MutationRate)
             {
-                for (int a = 0; a < AnsweredPosition.Count; a++)
+                while (!HasMutated)
                 {
-                    if ((AnsweredPosition[a].Item1 == (i / 9) && AnsweredPosition[a].Item2 == (i % 9)))
+                    //Mutate randomly
+                    int RandRowA = rand.Next(0, 9);
+                    int RandColA = rand.Next(0, 9);
+                    int RandRowB = rand.Next(0, 9);
+                    int RandColB = rand.Next(0, 9);
+
+                    while (RandColA == RandColB)
                     {
-                        //MutatedGrid[AnsweredPosition[a].Item1, AnsweredPosition[a].Item2] = GridGenes[i];
-                        break;
+                        RandColA = rand.Next(0, 9);
+                        RandColB = rand.Next(0, 9);
                     }
-                    else
+
+                    //This is very important, since we ensure all made grids to start have no doubles, it won't be possible to swap items between two randomr rows, so instead do it in the same row at two random cols
+                    RandRowB = RandRowA;
+                    //Check if new value already exists in row.     
+                    if (ProblemGrid.Grid[RandRowA, RandColA] == 0 && ProblemGrid.Grid[RandRowB, RandColB] == 0)
                     {
-                        //Swapping when we know it is safe, instead of just randomly switching or always swapping has helped the GA make progress significantly, as this helps prevent back tracking. 
-                        if (rand.NextDouble() <= MutationRate)
+                        if ((!WillWeInsertDuplicateForCol(ProblemGrid, RandColA, MutatedGrid.Grid[RandRowB, RandColB]) && !WillWeInsertduplicateForSubgid(ProblemGrid, RandRowA, RandColA, MutatedGrid.Grid[RandRowB, RandColB])) &&
+                            (!WillWeInsertDuplicateForCol(ProblemGrid, RandColB, MutatedGrid.Grid[RandRowA, RandColA]) && !WillWeInsertduplicateForSubgid(ProblemGrid, RandRowB, RandColB, MutatedGrid.Grid[RandRowA, RandColA])))// &&
+                                                                                                                                                                                                                                  //(!WillWeInsertDuplicateForRow(MutatedGrid.Grid, RandRowA, Grid.Grid[RandRowB, RandColB]) && !WillWeInsertDuplicateForRow(MutatedGrid.Grid, RandRowB, Grid.Grid[RandRowA, RandColA])))
                         {
-                            while(!HasMutated)
-                            {                    
-                                //Mutate randomly
-                                int RandRowA = rand.Next(0, 8);
-                                int RandColA = rand.Next(0, 8);
-                                int RandRowB = rand.Next(0, 8);
-                                int RandColB = rand.Next(0, 8);
-
-                                while (RandColA == RandColB)
-                                {
-                                    RandColA = rand.Next(0, 8);
-                                    RandColB = rand.Next(0, 8);
-                                }
-
-                                //make sure we dont' swap an answered spot
-                                while (AnsweredPosition.Exists(pos => pos.Item1 == RandRowA && pos.Item2 == RandColA) || AnsweredPosition.Exists(pos => pos.Item1 == RandRowB && pos.Item2 == RandColB))
-                                {
-                                    //Keep trying to get a row aand col that doesn't match an existing spot
-                                    RandRowA = rand.Next(0, 8);
-                                    RandColA = rand.Next(0, 8);
-
-                                    RandRowB = rand.Next(0, 8);
-                                    RandColB = rand.Next(0, 8);
-                                }
-
-                                //Check if new value already exists in row.
-                                //if ((!DoesIntAlreadyExistInRow(MutatedGrid, RandRowA, Grid.Grid[RandRowB, RandColB]) && !DoesIntAlreadyExistInRow(MutatedGrid, RandRowB, Grid.Grid[RandRowA, RandColA])))
-                                //{
-
-                                //}      
-                                if ((!WillWeInsertDuplicateForCol(ProblemGrid, RandColA, MutatedGrid.Grid[RandRowB, RandColB]) && !WillWeInsertduplicateForSubgid(ProblemGrid, RandRowA, RandColA, MutatedGrid.Grid[RandRowB, RandColB])) &&
-                                    (!WillWeInsertDuplicateForCol(ProblemGrid, RandColB, MutatedGrid.Grid[RandRowA, RandColA]) && !WillWeInsertduplicateForSubgid(ProblemGrid, RandRowB, RandColB, MutatedGrid.Grid[RandRowA, RandColA])))// &&
-                                    //(!WillWeInsertDuplicateForRow(ProblemGrid.Grid, RandRowA, Grid.Grid[RandRowB, RandColB]) && !WillWeInsertDuplicateForRow(ProblemGrid.Grid, RandRowB, Grid.Grid[RandRowA, RandColA])))
-                                {
-                                    //Safe to swap so swap Values at random spots. 
-                                    int AValue = MutatedGrid.Grid[RandRowA, RandColA];
-                                    MutatedGrid.Grid[RandRowA, RandColA] = MutatedGrid.Grid[RandRowB, RandColB];
-                                    MutatedGrid.Grid[RandRowB, RandColB] = AValue;
-                                    HasMutated = true;
-                                    NumberOfMutations++;
-                                }
-                            }
+                            //Safe to swap so swap Values at random spots. 
+                            int AValue = MutatedGrid.Grid[RandRowA, RandColA];
+                            MutatedGrid.Grid[RandRowA, RandColA] = MutatedGrid.Grid[RandRowB, RandColB];
+                            MutatedGrid.Grid[RandRowB, RandColB] = AValue;
+                            HasMutated = true;
+                            NumberOfMutations++;
                         }
                     }
                 }
@@ -932,7 +914,7 @@ namespace SudokuGA
 
             if (DoesGridRowsHaveDoubles(MutatedGrid))
             {
-                //Console.WriteLine("Why?");
+                Console.WriteLine("Why?");
             }
 
             if (MutatedGrid.fitness > OriginalFitness && HasMutated)
@@ -994,7 +976,7 @@ namespace SudokuGA
                 for (int i = ElitesSize; i < PopulationSize; i = i + 2)
                 {
                     //Apply Selection Pressures, by choosing the best random mommy and daddy 
-                    List<ASudokuGrid> NewChilldren = MateViaCrossover(new ASudokuGrid((int[,])TournamentSelection().Grid.Clone()), new ASudokuGrid((int[,])TournamentSelection().Grid.Clone()));
+                    List<ASudokuGrid> NewChilldren = MateViaCrossoverCycle(new ASudokuGrid((int[,])TournamentSelection().Grid.Clone()), new ASudokuGrid((int[,])TournamentSelection().Grid.Clone()));
                     NewChilldren.ForEach(child => 
                     {
                         NextPopulation.Add(new ASudokuGrid((int[,])Mutate(child).Clone()));
@@ -1006,11 +988,6 @@ namespace SudokuGA
                 NextPopulation.AddRange(Elites);
 
                 Population = NextPopulation;
-
-                //Elitism
-                //Try Adding to population, sorting then, pruning out the worst instead of just swapping out new generation with old, although both seem to get stuck in the same place at different rates. 
-                //SortPopulationByFitness();
-                //Population.RemoveRange(PopulationSize - 1, Population.Count - PopulationSize);
 
                 if (ReseedEnabled)
                 {
@@ -1040,7 +1017,7 @@ namespace SudokuGA
 
                 if (bestFitness == 0)
                 {
-                    Console.WriteLine("Current Generation " + Generation + " Solution Foumd! ");
+                    Console.WriteLine("Current Generation " + Generation + " Solution Found! ");
                     BestFitnessInPopulation(true);
                     break;
                 }
