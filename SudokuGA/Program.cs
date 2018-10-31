@@ -40,7 +40,7 @@ namespace SudokuGA
         static float SelectionRate = .9f;
         static float CrossoverRate = 1.0f;
         static int k = 2;
-        static bool ReseedEnabled = true;
+        static bool ReseedEnabled = false;
         static int Stale = 0;
         static int StaleLimit = 15;
         static float PopulationReSeedPercent = 0.85f;
@@ -178,10 +178,10 @@ namespace SudokuGA
                     //Reset for next Row
                     ValidUsableNumberClone = ValidUsableNumber.ToList(); ;
                 }
-                if (DoesGridRowsHaveDoubles(Population[i])) 
-                {
-                    Console.WriteLine("Why");
-                }
+                //if (DoesGridRowsHaveDoubles(Population[i])) 
+                //{
+                //    Console.WriteLine("Why");
+                //}
             }
         }
 
@@ -195,11 +195,23 @@ namespace SudokuGA
                 Population.Insert(i, new ASudokuGrid((int[,])ProblemSudokuGrid.Clone()));
                 for (int x = 0; x < Population[i].Grid.GetLength(0); ++x)
                 {
+
+                    //I need to filter out answered positions from the list of ValidUsableNumbers for every row before I attempt to add valid Usable numbers
+                    //As already answered positions should be excluded from the ValidUsableNumbers list.
+                    for (int preY = 0; preY < 9; preY++)
+                    {
+                        if (AnsweredPosition.Exists(pos => pos.Item1 == x && pos.Item2 == preY))
+                        {
+                            ValidUsableNumberClone.Remove(Population[i].Grid[x, preY]);
+                        }
+                    }
+
                     for (int y = 0; y < Population[i].Grid.GetLength(1); ++y)
                     {
                         //If not an answered pos, fill in with a new random number
                         if (!AnsweredPosition.Exists(pos => pos.Item1 == x && pos.Item2 == y))
                         {
+
                             int newRandNum = ValidUsableNumberClone.OrderBy(n => rand.Next()).Take(1).ToList()[0];
                             while (DoesIntAlreadyExistInRow(Population[i].Grid, x, newRandNum))
                             {
@@ -212,6 +224,10 @@ namespace SudokuGA
                     }
                     //Reset for next Row
                     ValidUsableNumberClone = ValidUsableNumber.ToList(); ;
+                }
+                if (DoesGridRowsHaveDoubles(Population[i]))
+                {
+                    Console.WriteLine("Why");
                 }
                 Population[i].UpdateFitness();
             }
@@ -421,18 +437,18 @@ namespace SudokuGA
 
             int[,] ChildGrid = new int[9, 9];
 
-            MommyGenes = GetGridAsGenes(Mommy.Grid);
-            DaddyGenes = GetGridAsGenes(Daddy.Grid);
+            MommyGenes = GetGridAsGenes((int[,])Mommy.Grid.Clone());
+            DaddyGenes = GetGridAsGenes((int[,])Daddy.Grid.Clone());
 
             if (rand.NextDouble() <= CrossoverRate)
             {
                 int RandomCrossOverPoint = rand.Next(0, 80);
 
-                NewChildGenes1.AddRange(MommyGenes.GetRange(0, RandomCrossOverPoint));
-                NewChildGenes1.AddRange(DaddyGenes.GetRange(RandomCrossOverPoint, ((DaddyGenes.Count) - RandomCrossOverPoint)));
+                NewChildGenes1.AddRange(MommyGenes.ToList().GetRange(0, RandomCrossOverPoint));
+                NewChildGenes1.AddRange(DaddyGenes.ToList().GetRange(RandomCrossOverPoint, ((DaddyGenes.Count) - RandomCrossOverPoint)));
 
-                NewChildGenes2.AddRange(DaddyGenes.GetRange(0, RandomCrossOverPoint));
-                NewChildGenes2.AddRange(MommyGenes.GetRange(RandomCrossOverPoint, ((DaddyGenes.Count) - RandomCrossOverPoint)));
+                NewChildGenes2.AddRange(DaddyGenes.ToList().GetRange(0, RandomCrossOverPoint));
+                NewChildGenes2.AddRange(MommyGenes.ToList().GetRange(RandomCrossOverPoint, ((DaddyGenes.Count) - RandomCrossOverPoint)));
 
 
                 Children.Add(new ASudokuGrid((int[,])ConvertRawGenesToGrid(NewChildGenes1).Clone()));
@@ -441,10 +457,17 @@ namespace SudokuGA
             else
             {
                 //Asexual reproduction 
-                Children.Add(new ASudokuGrid((int[,])ConvertRawGenesToGrid(MommyGenes).Clone()));
-                Children.Add(new ASudokuGrid((int[,])ConvertRawGenesToGrid(DaddyGenes).Clone()));
+                Children.Add(new ASudokuGrid((int[,])Mommy.Grid.Clone()));
+                Children.Add(new ASudokuGrid((int[,])Daddy.Grid.Clone()));
             }
 
+            if (DoesGridRowsHaveDoubles(Children[0]) || DoesGridRowsHaveDoubles(Children[1]))
+            {
+                Children.Clear();
+                //Asexual reproduction 
+                Children.Add(new ASudokuGrid((int[,])Mommy.Grid.Clone()));
+                Children.Add(new ASudokuGrid((int[,])Daddy.Grid.Clone()));
+            }
 
             return Children;
         }
@@ -518,7 +541,11 @@ namespace SudokuGA
                 }
 
                 for (int i = CrossoverPoint_1; i < CrossoverPoint_2; i++)
+
                 {
+                    //Reset for next row/attempt
+                    Child1Row.Clear();
+                    Child2Row.Clear();
                     //Pluck rows out in C# fashion
                     for (int y = 0; y < 9; y++)
                     {
@@ -531,20 +558,23 @@ namespace SudokuGA
                     }
                     //Crossover Rows in Cycle Fashion
                     List<List<int>> RowsCrossed = CrossoverRows(Child1Row, Child2Row);
-                    Child1Row = RowsCrossed[0];
-                    Child2Row = RowsCrossed[1];
+                    //Child1Row = RowsCrossed[0];
+                    //Child2Row = RowsCrossed[1];
                     //Put crossed rows back in to their slots, make check here to not replace known values from original grid
                     for (int y = 0; y < 9; y++)
                     {
-                        Child1.Grid[i, y] = Child1Row[y];
-                        Child2.Grid[i, y] = Child2Row[y];
+                        if (!AnsweredPosition.Exists(pos => pos.Item1 == i && pos.Item2 == y))
+                        {
+                            Child1.Grid[i, y] = RowsCrossed[0][y];
+                            Child2.Grid[i, y] = RowsCrossed[1][y];
+                        }
                     }
-                    //Rest for next row/attempt
-                    Child1Row.Clear();
-                    Child2Row.Clear();
                 }
             }
-
+            //Children[0].UpdateFitness();
+            //Children[1].UpdateFitness();
+            Children.Add(Child1);
+            Children.Add(Child2);
             //Return Crossed Children 
             return Children;
         }
@@ -727,7 +757,7 @@ namespace SudokuGA
                 {
                     if ((AnsweredPosition[a].Item1 == (i / 9) && AnsweredPosition[a].Item2 == (i % 9)))
                     {
-                        MutatedGrid[AnsweredPosition[a].Item1, AnsweredPosition[a].Item2] = GridGenes[i];
+                        //MutatedGrid[AnsweredPosition[a].Item1, AnsweredPosition[a].Item2] = GridGenes[i];
                         break;
                     }
                     else
@@ -765,10 +795,10 @@ namespace SudokuGA
                                 NumberOfMutations++;
                             }                         
                         }
-                        if (DoesGridRowsHaveDoubles(new ASudokuGrid(MutatedGrid))) ;
-                        {
-                            Console.WriteLine("Why?");
-                        }
+                        //if (DoesGridRowsHaveDoubles(new ASudokuGrid(MutatedGrid)))
+                        //{
+                        //    Console.WriteLine("Why?");
+                        //}
                     }
                 }
             }
