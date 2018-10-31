@@ -31,18 +31,19 @@ namespace SudokuGA
         static Random rand = new Random();
         static int[,] ProblemSudokuGrid;// = new int[9,9];
         static int PopulationSize = 3800;
+        static int ElitesSize = (int)(0.05f * PopulationSize);
         static int MaxGenerations = 1000;
         static int Generation = 0;
         static float Phi = 0;
         static int NumberOfMutations = 0;
         static float Sigma = 1.0f;
-        static float MutationRate = 0.07f;
-        static float SelectionRate = .9f;
+        static float MutationRate = 0.065f;
+        static float SelectionRate = .85f;
         static float CrossoverRate = 1.0f;
         static int k = 2;
-        static bool ReseedEnabled = false;
+        static bool ReseedEnabled = true;
         static int Stale = 0;
-        static int StaleLimit = 15;
+        static int StaleLimit = 50;
         static float PopulationReSeedPercent = 0.85f;
         static List<ASudokuGrid> Population = new List<ASudokuGrid>();
         static List<Tuple<int, int>> AnsweredPosition;
@@ -858,30 +859,40 @@ namespace SudokuGA
 
         static void RunEpoch()
         {
+
             for (int g = 0; g < MaxGenerations; g++)
             {
-                List<ASudokuGrid> NewPopulation = new List<ASudokuGrid>();
 
-                //Mate to New Populataion
-                for (int i = 0; i < PopulationSize; i++)
+                List<ASudokuGrid> NextPopulation = new List<ASudokuGrid>();
+                List<ASudokuGrid> Elites = new List<ASudokuGrid>();
+                SortPopulationByFitness();
+                //Get best in population before Mating and Mutating
+                for (int e = 0; e < ElitesSize; e++)
+                {
+                    Elites.Add(new ASudokuGrid((int[,])Population[e].Grid.Clone()));
+                }
+
+                //Mate to New Populataion considering the best for 
+                for (int i = ElitesSize; i < PopulationSize; i = i + 2)
                 {
                     //Apply Selection Pressures, by choosing the best random mommy and daddy 
                     List<ASudokuGrid> NewChilldren = MateViaCrossoverCycle(new ASudokuGrid((int[,])TournamentSelection().Grid.Clone()), new ASudokuGrid((int[,])TournamentSelection().Grid.Clone()));
                     NewChilldren.ForEach(child => 
                     {
-                        Population.Add(new ASudokuGrid((int[,])Mutate(child).Clone()));
+                        NextPopulation.Add(new ASudokuGrid((int[,])Mutate(child).Clone()));
                     });
                 }
 
                 //CalculateDynamicMutationRate();
 
+                NextPopulation.AddRange(Elites);
+
+                Population = NextPopulation;
+
                 //Elitism
                 //Try Adding to population, sorting then, pruning out the worst instead of just swapping out new generation with old, although both seem to get stuck in the same place at different rates. 
-                SortPopulationByFitness();
-                Population.RemoveRange(PopulationSize - 1, Population.Count - PopulationSize);
-
-                //Old Original Population is now the new Population, rinse and repeat. 
-                //Population = NewPopulation;
+                //SortPopulationByFitness();
+                //Population.RemoveRange(PopulationSize - 1, Population.Count - PopulationSize);
 
                 if (ReseedEnabled)
                 {
