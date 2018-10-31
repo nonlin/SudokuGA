@@ -30,17 +30,18 @@ namespace SudokuGA
 
         static Random rand = new Random();
         static int[,] ProblemSudokuGrid;// = new int[9,9];
-        static int PopulationSize = 3800;
+        static ASudokuGrid ProblemGrid;
+        static int PopulationSize = 100;
         static int ElitesSize = (int)(0.05f * PopulationSize);
         static int MaxGenerations = 1000;
         static int Generation = 0;
         static float Phi = 0;
         static int NumberOfMutations = 0;
         static float Sigma = 1.0f;
-        static float MutationRate = 0.065f;
+        static float MutationRate = 0.06f;
         static float SelectionRate = .85f;
         static float CrossoverRate = 1.0f;
-        static int k = 2;
+        static int k = 5;
         static bool ReseedEnabled = true;
         static int Stale = 0;
         static int StaleLimit = 50;
@@ -56,8 +57,6 @@ namespace SudokuGA
 
             GenerateIntialPopulations();
             RunEpoch();
-
-            //MateViaCrossoverCycle(Population[0], Population[1]);
 
             int[,] TestGrid = new int[9, 9]
             {
@@ -85,7 +84,11 @@ namespace SudokuGA
                 { 3, 4, 5, 2, 8, 6, 1, 7, 9 }
             };
 
-
+            //Test Check Methods
+            //Console.WriteLine(WillWeInsertduplicateForSubgid(new ASudokuGrid(AnswerGrid), 1, 1, 8));
+            //Console.WriteLine(DoesColContainDuplicates(new ASudokuGrid(AnswerGrid), 2));
+            //Console.WriteLine(DoesGridColHaveDuplicates(new ASudokuGrid(AnswerGrid)));
+            
             //for (int i = 0; i < 8; i++)
             //{
             //    //PrintGrid(GridToString(Population[i].Grid));
@@ -134,6 +137,7 @@ namespace SudokuGA
                 { 0, 0, 0, 4, 1, 9, 0, 0, 5 },
                 { 0, 0, 0, 0, 8, 0, 0, 7, 9 }
             };
+            ProblemGrid = new ASudokuGrid(ProblemSudokuGrid);
         }
 
         static void GenerateIntialPopulations()
@@ -167,7 +171,7 @@ namespace SudokuGA
                         {
 
                             int newRandNum = ValidUsableNumberClone.OrderBy(n => rand.Next()).Take(1).ToList()[0];
-                            while (DoesIntAlreadyExistInRow(Population[i].Grid, x, newRandNum))
+                            while (WillWeInsertDuplicateForRow(Population[i].Grid, x, newRandNum))
                             {
                                 ValidUsableNumberClone.Remove(newRandNum);
                                 if (ValidUsableNumberClone.Count > 0)
@@ -214,7 +218,7 @@ namespace SudokuGA
                         {
 
                             int newRandNum = ValidUsableNumberClone.OrderBy(n => rand.Next()).Take(1).ToList()[0];
-                            while (DoesIntAlreadyExistInRow(Population[i].Grid, x, newRandNum))
+                            while (WillWeInsertDuplicateForRow(Population[i].Grid, x, newRandNum))
                             {
                                 ValidUsableNumberClone.Remove(newRandNum);
                                 if (ValidUsableNumberClone.Count > 0)
@@ -323,6 +327,117 @@ namespace SudokuGA
             return DuplicateCount / 144.0f;//216.0f;
         }
 
+        #region Helpers
+
+        static bool WillWeInsertduplicateForSubgid(ASudokuGrid Grid, int row, int col, int value)
+        {
+            int i = 3 * (int)(row / 3);
+            int j = 3 * (int)(col / 3);
+
+            if (Grid.Grid[i, j] == value
+           || (Grid.Grid[i, j + 1] == value)
+           || (Grid.Grid[i, j + 2] == value)
+           || (Grid.Grid[i + 1, j] == value)
+           || (Grid.Grid[i + 1, j + 1] == value)
+           || (Grid.Grid[i + 1, j + 2] == value)
+           || (Grid.Grid[i + 2, j] == value)
+           || (Grid.Grid[i + 2, j + 1] == value)
+           || (Grid.Grid[i + 2, j + 2] == value))
+            {
+                return true;
+            }
+
+            return false;
+        }
+
+        static bool WillWeInsertDuplicateForCol(ASudokuGrid Grid, int ColToCheck, int value)
+        {
+            List<int> ColInts = new List<int>();
+            for (int x = 0; x < (Grid.Grid.GetLength(0)); ++x)
+            {
+                if (Grid.Grid[x, ColToCheck] == value)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        static bool WillWeInsertDuplicateForRow(int[,] Grid, int Row, int ValueToCheck)
+        {
+            for (int y = 0; y < 9; y++)
+            {
+                if (Grid[Row, y] == ValueToCheck)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        static bool DoesSubgridsHaveDuplicates(ASudokuGrid Grid)
+        {
+            List<List<int>> Subgrids = new List<List<int>>();
+            int YCounter = 1;
+            int XCounter = 1;
+            bool ContainsDuplicate = false;
+            //May want/need to wrap into a method, this converts a 2D Grid into sub grids for a 9x9 grid.
+            for (int SubgridIndex = 1; SubgridIndex <= 9; SubgridIndex++)
+            {
+                Subgrids.Add(new List<int>());
+                for (int x = ((Grid.Grid.GetLength(0) / 3) * XCounter) - (Grid.Grid.GetLength(0) / 3); x < (Grid.Grid.GetLength(0) / 3) * XCounter; ++x)
+                {
+                    //Y Works well, do something for X now. 
+                    for (int y = (Grid.Grid.GetLength(1) - (3 * (3 - YCounter))) - 3; y < (Grid.Grid.GetLength(1) - (3 * (3 - YCounter))); ++y)
+                    {
+                        Subgrids[Subgrids.Count - 1].Add(Grid.Grid[x, y]);
+                    }
+                }
+                if (SubgridIndex % 3 == 0)
+                {
+                    YCounter = 1;
+                    XCounter++;
+                }
+                else
+                {
+                    YCounter++;
+                }
+            }
+
+            //Count doubles for subgrids
+            Subgrids.ForEach(SubGrid =>
+            {
+                if (SubGrid.Count != SubGrid.Distinct().Count())
+                {
+                    ContainsDuplicate = true;
+                }
+            });
+
+            return ContainsDuplicate;
+        }
+
+        static bool DoesGridColHaveDuplicates(ASudokuGrid Grid)
+        {
+            List<int> ColInts = new List<int>();
+            //Count for rows and cols
+            for (int x = 0; x < (Grid.Grid.GetLength(0)); ++x)
+            {
+                for (int y = 0; y < (Grid.Grid.GetLength(1)); ++y)
+                {
+                    ColInts.Add(Grid.Grid[y, x]);
+                }
+                if (ColInts.Count != ColInts.Distinct().Count())
+                {
+                    return true;
+                }
+                ColInts.Clear();
+            }
+
+            return false;
+        }
+
         static bool DoesGridRowsHaveDoubles(ASudokuGrid Grid)
         {
             List<int> RowInts = new List<int>();
@@ -341,6 +456,7 @@ namespace SudokuGA
             }
             return false;
         }
+        #endregion Helper
 
         static void PrintFitnessForEntirePopulation(List<ASudokuGrid> Population)
         {
@@ -555,7 +671,7 @@ namespace SudokuGA
                     }
                     if (Child1Row.Count != Child1Row.Distinct().Count() || Child2Row.Count != Child2Row.Distinct().Count())
                     {
-                        Console.Write("Why");
+                        //Console.Write("Why");
                     }
                     //Crossover Rows in Cycle Fashion
                     List<List<int>> RowsCrossed = CrossoverRows(Child1Row, Child2Row);
@@ -580,7 +696,7 @@ namespace SudokuGA
             return Children;
         }
 
-        //Thils will not work if rows have doubles, each row should have a unique number for this to work. 
+        //Thils will not work if rows have doubles, each row should have a unique number for this to work. Otherwise it will get stuck trying to swap values. 
         static List<List<int>> CrossoverRows(List<int> Row1, List<int> Row2)
         {
             List<List<int>> ChilldrenRows = new List<List<int>>();
@@ -747,7 +863,8 @@ namespace SudokuGA
 
         static int[,] Mutate(ASudokuGrid Grid)
         {
-            int[,] MutatedGrid = (int[,])Grid.Grid.Clone();
+            ASudokuGrid MutatedGrid = new ASudokuGrid((int[,])Grid.Grid.Clone());
+
             List<int> GridGenes = new List<int>();
             GridGenes = GetGridAsGenes(Grid.Grid);
             float OriginalFitness = Grid.fitness;//GridsFitness(Grid);
@@ -766,50 +883,64 @@ namespace SudokuGA
                         //Swapping when we know it is safe, instead of just randomly switching or always swapping has helped the GA make progress significantly, as this helps prevent back tracking. 
                         if (rand.NextDouble() <= MutationRate)
                         {
-                            //Mutate randomly
-                            int RandRowA = rand.Next(0, 8);
-                            int RandColA = rand.Next(0, 8);
-                            int RandRowB = rand.Next(0, 8);
-                            int RandColB = rand.Next(0, 8);
-                            //make sure we dont' swap an answered spot
-                            while (AnsweredPosition.Exists(pos => pos.Item1 == RandRowA && pos.Item2 == RandColA) || AnsweredPosition.Exists(pos => pos.Item1 == RandRowB && pos.Item2 == RandColB))
-                            {
-                                //Keep trying to get a row aand col that doesn't match an existing spot
-                                RandRowA = rand.Next(0, 8);
-                                RandColA = rand.Next(0, 8);
+                            while(!HasMutated)
+                            {                    
+                                //Mutate randomly
+                                int RandRowA = rand.Next(0, 8);
+                                int RandColA = rand.Next(0, 8);
+                                int RandRowB = rand.Next(0, 8);
+                                int RandColB = rand.Next(0, 8);
 
-                                RandRowB = rand.Next(0, 8);
-                                RandColB = rand.Next(0, 8);
+                                while (RandColA == RandColB)
+                                {
+                                    RandColA = rand.Next(0, 8);
+                                    RandColB = rand.Next(0, 8);
+                                }
+
+                                //make sure we dont' swap an answered spot
+                                while (AnsweredPosition.Exists(pos => pos.Item1 == RandRowA && pos.Item2 == RandColA) || AnsweredPosition.Exists(pos => pos.Item1 == RandRowB && pos.Item2 == RandColB))
+                                {
+                                    //Keep trying to get a row aand col that doesn't match an existing spot
+                                    RandRowA = rand.Next(0, 8);
+                                    RandColA = rand.Next(0, 8);
+
+                                    RandRowB = rand.Next(0, 8);
+                                    RandColB = rand.Next(0, 8);
+                                }
+
+                                //Check if new value already exists in row.
+                                //if ((!DoesIntAlreadyExistInRow(MutatedGrid, RandRowA, Grid.Grid[RandRowB, RandColB]) && !DoesIntAlreadyExistInRow(MutatedGrid, RandRowB, Grid.Grid[RandRowA, RandColA])))
+                                //{
+
+                                //}      
+                                if ((!WillWeInsertDuplicateForCol(ProblemGrid, RandColA, MutatedGrid.Grid[RandRowB, RandColB]) && !WillWeInsertduplicateForSubgid(ProblemGrid, RandRowA, RandColA, MutatedGrid.Grid[RandRowB, RandColB])) &&
+                                    (!WillWeInsertDuplicateForCol(ProblemGrid, RandColB, MutatedGrid.Grid[RandRowA, RandColA]) && !WillWeInsertduplicateForSubgid(ProblemGrid, RandRowB, RandColB, MutatedGrid.Grid[RandRowA, RandColA])))// &&
+                                    //(!WillWeInsertDuplicateForRow(ProblemGrid.Grid, RandRowA, Grid.Grid[RandRowB, RandColB]) && !WillWeInsertDuplicateForRow(ProblemGrid.Grid, RandRowB, Grid.Grid[RandRowA, RandColA])))
+                                {
+                                    //Safe to swap so swap Values at random spots. 
+                                    int AValue = MutatedGrid.Grid[RandRowA, RandColA];
+                                    MutatedGrid.Grid[RandRowA, RandColA] = MutatedGrid.Grid[RandRowB, RandColB];
+                                    MutatedGrid.Grid[RandRowB, RandColB] = AValue;
+                                    HasMutated = true;
+                                    NumberOfMutations++;
+                                }
                             }
-                            if (RandRowA == 0 && RandColA == 0)
-                            {
-                                Console.WriteLine("Failed");
-                            }
-                            //Check if new value already exists in row.
-                            if (!DoesIntAlreadyExistInRow(MutatedGrid, RandRowA, Grid.Grid[RandRowB, RandColB]) && !DoesIntAlreadyExistInRow(MutatedGrid, RandRowB, Grid.Grid[RandRowA, RandColA]))
-                            {
-                                //Safe to swap so swap Values at random spots. 
-                                int AValue = MutatedGrid[RandRowA, RandColA];
-                                MutatedGrid[RandRowA, RandColA] = MutatedGrid[RandRowB, RandColB];
-                                MutatedGrid[RandRowB, RandColB] = AValue;
-                                HasMutated = true;
-                                NumberOfMutations++;
-                            }                         
                         }
-                        //if (DoesGridRowsHaveDoubles(new ASudokuGrid(MutatedGrid)))
-                        //{
-                        //    Console.WriteLine("Why?");
-                        //}
                     }
                 }
             }
 
-            if (GridsFitness(MutatedGrid) > OriginalFitness && HasMutated)
+            if (DoesGridRowsHaveDoubles(MutatedGrid))
+            {
+                //Console.WriteLine("Why?");
+            }
+
+            if (MutatedGrid.fitness > OriginalFitness && HasMutated)
             {
                 Phi = Phi + 1;
             }
 
-            return MutatedGrid;
+            return MutatedGrid.Grid;
         }
 
         static void CalculateDynamicMutationRate()
@@ -835,19 +966,6 @@ namespace SudokuGA
             Normal normalDist = new Normal(0.0f, Sigma);
 
             MutationRate = Math.Abs((float)normalDist.Sample());
-        }
-
-        static bool DoesIntAlreadyExistInRow(int[,] Grid, int Row, int ValueToCheck)
-        {
-            for (int y = 0; y < 9; y++)
-            {
-                if (Grid[Row, y] == ValueToCheck)
-                {
-                    return true;
-                }
-            }
-
-            return false;
         }
 
         static void SortPopulationByFitness()
@@ -876,14 +994,14 @@ namespace SudokuGA
                 for (int i = ElitesSize; i < PopulationSize; i = i + 2)
                 {
                     //Apply Selection Pressures, by choosing the best random mommy and daddy 
-                    List<ASudokuGrid> NewChilldren = MateViaCrossoverCycle(new ASudokuGrid((int[,])TournamentSelection().Grid.Clone()), new ASudokuGrid((int[,])TournamentSelection().Grid.Clone()));
+                    List<ASudokuGrid> NewChilldren = MateViaCrossover(new ASudokuGrid((int[,])TournamentSelection().Grid.Clone()), new ASudokuGrid((int[,])TournamentSelection().Grid.Clone()));
                     NewChilldren.ForEach(child => 
                     {
                         NextPopulation.Add(new ASudokuGrid((int[,])Mutate(child).Clone()));
                     });
                 }
 
-                //CalculateDynamicMutationRate();
+                CalculateDynamicMutationRate();
 
                 NextPopulation.AddRange(Elites);
 
@@ -918,7 +1036,7 @@ namespace SudokuGA
                 }
 
                 Generation++;
-                float bestFitness = BestFitnessInPopulation(false);
+                float bestFitness = BestFitnessInPopulation(true);
 
                 if (bestFitness == 0)
                 {
