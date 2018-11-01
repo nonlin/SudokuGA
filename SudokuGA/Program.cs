@@ -4,6 +4,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using IronOcr;
+using SudokuSolverLib;
 
 namespace SudokuGA
 {
@@ -30,12 +32,11 @@ namespace SudokuGA
 
     public class Program
     {
-
-
         static Random rand = new Random();
+        static SudokuPuzzle NewPuzzle;
         static int[,] ProblemSudokuGrid;// = new int[9,9];
         static ASudokuGrid ProblemGrid;
-        static int PopulationSize = 500;
+        static int PopulationSize = 250;
         static int ElitesSize = (int)(0.05f * PopulationSize);
         static int MaxGenerations = 1000;
         static int Generation = 0;
@@ -48,16 +49,37 @@ namespace SudokuGA
         static int k = 2;
         static bool ReseedEnabled = true;
         static int Stale = 0;
-        static int StaleLimit = 3;
+        static int StaleLimit = 100;
         static float PopulationReSeedPercent = 0.95f;
         static List<ASudokuGrid> Population = new List<ASudokuGrid>();
         static List<Tuple<int, int>> AnsweredPosition;
         static List<int> ValidUsableNumber = new List<int>() { 1, 2, 3, 4, 5, 6, 7, 8, 9 };
+
+        static void ShowIntroText()
+        {
+            ConsoleKeyInfo Input;
+            Console.WriteLine("'E' to use example grid or 'R' load random grid");
+            Input = Console.ReadKey();
+            Console.WriteLine();
+            if (Input.Key == ConsoleKey.E)
+            {
+                InitProblemGrid();
+            }
+            else if (Input.Key == ConsoleKey.R)
+            {
+                InitProblemGridWithOCR();
+            }
+            else
+            {
+                ShowIntroText();
+            }
+        }
+
         static void Main(string[] args)
         {
+            ShowIntroText();
 
-            InitProblemGrid();
-            AnsweredPosition = GetPositionsToIgnore(ProblemSudokuGrid);
+            AnsweredPosition = GetPositionsToIgnore(ProblemGrid.Grid);
 
             GenerateIntialPopulations();
             RunEpoch();
@@ -142,6 +164,28 @@ namespace SudokuGA
                 { 0, 0, 0, 0, 8, 0, 0, 7, 9 }
             };
             ProblemGrid = new ASudokuGrid(ProblemSudokuGrid);
+        }
+
+        public static void InitProblemGridWithOCR()
+        {
+            ProblemSudokuGrid = new int[9, 9];
+            NewPuzzle = SudokuPuzzle.Create(3, 3, 30);
+            NewPuzzle.GetNodes().ToList().ForEach(Node =>
+            {
+                if (Node.Value == -1)
+                {
+                    ProblemSudokuGrid[Node.Line, Node.Column] = 0;
+                }
+                else
+                {
+                    ProblemSudokuGrid[Node.Line, Node.Column] = Node.Value;
+                }
+            });
+
+            ProblemGrid = new ASudokuGrid(ProblemSudokuGrid);
+            Console.WriteLine("Press any key to have GA solve this grid.");
+            PrintGrid(GridToString(ProblemGrid.Grid));
+            Console.ReadKey();
         }
 
         static void GenerateIntialPopulations()
@@ -798,24 +842,17 @@ namespace SudokuGA
 
         static float BestFitnessInPopulation(bool DisplayGrid)
         {
-            float bestFitness = 1.0f;
             ASudokuGrid BestGrid = new ASudokuGrid();
-            for (int i = 0; i < Population.Count; i++)
-            {
-                BestGrid = new ASudokuGrid((int[,])(Population[i].Grid.Clone()));
-                float currentFitness = BestGrid.fitness;//GridsFitness(BestGrid.Grid);
-                if (currentFitness < bestFitness)
-                {
-                    bestFitness = currentFitness;
-                }
-            }
 
+            List<ASudokuGrid> TempGridToSort = Population;
+            TempGridToSort.Sort((SudokuGridA, SudokuGridB) => SudokuGridA.fitness.CompareTo(SudokuGridB.fitness));
+            BestGrid = TempGridToSort[0];
             if (DisplayGrid)
             {
                 PrintGrid(GridToString(BestGrid.Grid));
             }
 
-            return bestFitness;
+            return BestGrid.fitness;
         }
 
         static ASudokuGrid TournamentSelection()
@@ -1003,7 +1040,8 @@ namespace SudokuGA
                     if (Stale >= StaleLimit)
                     {
                         //This may not be a very good solution, seems useless probably gets pruned since none of the will be good? 
-                        RegenerateFromIndex((int)(PopulationSize * PopulationReSeedPercent));
+                        //RegenerateFromIndex((int)(PopulationSize * PopulationReSeedPercent));
+                        GenerateIntialPopulations();
                         Console.WriteLine("Went Stale, Reseeding");
                         Stale = 0;
                         NumberOfMutations = 0;
@@ -1017,13 +1055,32 @@ namespace SudokuGA
 
                 if (bestFitness == 0)
                 {
+                    Console.WriteLine("-------------");
                     Console.WriteLine("Current Generation " + Generation + " Solution Found! ");
                     BestFitnessInPopulation(true);
+                    if (NewPuzzle != null)
+                    {
+                        NewPuzzle.SolveGrid();
+                        Console.WriteLine("-------------");
+                        Console.WriteLine("Comparison Solution");
+                        Console.WriteLine(SudokuSolverLib.Helpers.GridHelpers.PrettyPrint(NewPuzzle));
+                    }
                     break;
                 }
                 else
                 {
                     Console.WriteLine("Current Generation " + Generation + " best fitness " + bestFitness);
+                }
+                if (Generation == MaxGenerations)
+                {
+                    Console.WriteLine("Trying Again");
+                    g = 0;
+                    GenerateIntialPopulations();
+                    Stale = 0;
+                    NumberOfMutations = 0;
+                    Sigma = 1;
+                    MutationRate = 0.07f;
+                    Generation = 0;
                 }
             }
         }
