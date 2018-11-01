@@ -36,9 +36,9 @@ namespace SudokuGA
         static SudokuPuzzle NewPuzzle;
         static int[,] ProblemSudokuGrid;// = new int[9,9];
         static ASudokuGrid ProblemGrid;
-        static int PopulationSize = 250;
+        static int PopulationSize = 200;
         static int ElitesSize = (int)(0.05f * PopulationSize);
-        static int MaxGenerations = 1000;
+        static int MaxGenerations = 500;
         static int Generation = 0;
         static float Phi = 0;
         static int NumberOfMutations = 0;
@@ -48,6 +48,8 @@ namespace SudokuGA
         static float CrossoverRate = 1.0f;
         static int k = 2;
         static bool ReseedEnabled = true;
+        static int Retries = 0;
+        static bool ShowGridsPerGeneration = false;
         static int Stale = 0;
         static int StaleLimit = 100;
         static float PopulationReSeedPercent = 0.95f;
@@ -1051,12 +1053,17 @@ namespace SudokuGA
                 }
 
                 Generation++;
-                float bestFitness = BestFitnessInPopulation(true);
+                float bestFitness = BestFitnessInPopulation(ShowGridsPerGeneration);
 
                 if (bestFitness == 0)
                 {
                     Console.WriteLine("-------------");
-                    Console.WriteLine("Current Generation " + Generation + " Solution Found! ");
+                    string retryText;
+                    if (Retries == 1)
+                        retryText = " retry";
+                    else
+                        retryText = " retries";
+                    Console.WriteLine("Current Generation " + Generation + " Solution Found! with " + Retries.ToString() + retryText);
                     BestFitnessInPopulation(true);
                     if (NewPuzzle != null)
                     {
@@ -1080,7 +1087,8 @@ namespace SudokuGA
                     NumberOfMutations = 0;
                     Sigma = 1;
                     MutationRate = 0.07f;
-                    Generation = 0;
+                    Generation = 1;
+                    Retries++;
                 }
             }
         }
